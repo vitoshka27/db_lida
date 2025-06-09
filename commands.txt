@@ -1,0 +1,2 @@
+docker build -t photo_center .    
+docker run --name photo_center_db -p 3306:3306 -d photo_center
