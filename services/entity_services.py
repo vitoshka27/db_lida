@@ -1,6 +1,6 @@
 from services.base_service import BaseService
 from models_orm import (
-    Employee, Workplace, Branch, Kiosk, Client, DiscountCard, ProfiDiscount, Supplier, ProductCategory, SupplierSpecialization, Product, Supply, Distribution, Order, FilmDevelopment, PhotoPrint, PrintDetail, Sale, ServiceType, ServiceOrder, MainOffice
+    Employee, Workplace, Branch, Kiosk, Client, DiscountCard, ProfiDiscount, Supplier, ProductCategory, SupplierSpecialization, Product, Supply, Distribution, Order, FilmDevelopment, PhotoPrint, PrintDetail, Sale, ServiceType, ServiceOrder, MainOffice, Role, Permission, RolePermission, UserRole
 )
 from sqlalchemy.orm import joinedload
 from orm_db import SessionLocal
@@ -101,3 +101,19 @@ class ServiceOrderService(BaseService):
 class MainOfficeService(BaseService):
     def __init__(self):
         super().__init__(MainOffice) 
+
+class RoleService(BaseService):
+    def __init__(self):
+        super().__init__(Role)
+
+class PermissionService(BaseService):
+    def __init__(self):
+        super().__init__(Permission)
+
+class RolePermissionService(BaseService):
+    def __init__(self):
+        super().__init__(RolePermission)
+
+class UserRoleService(BaseService):
+    def __init__(self):
+        super().__init__(UserRole)

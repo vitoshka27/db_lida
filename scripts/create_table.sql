@@ -216,3 +216,35 @@ CREATE TABLE Employee (
   FOREIGN KEY (workplace_id) REFERENCES Workplace(id)
 );
 
+-- Таблица ролей
+CREATE TABLE Role (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255)
+);
+
+-- Таблица прав (permissions)
+CREATE TABLE Permission (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255)
+);
+
+-- Таблица связей ролей и прав (многие-ко-многим)
+CREATE TABLE RolePermission (
+    role_id INT NOT NULL,
+    permission_id INT NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES Role(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES Permission(id) ON DELETE CASCADE
+);
+
+-- Таблица связей пользователей и ролей (многие-ко-многим)
+CREATE TABLE UserRole (
+    employee_id INT NOT NULL,
+    role_id INT NOT NULL,
+    PRIMARY KEY (employee_id, role_id),
+    FOREIGN KEY (employee_id) REFERENCES Employee(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES Role(id) ON DELETE CASCADE
+);
+

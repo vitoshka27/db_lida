@@ -136,6 +136,14 @@ COLUMN_TRANSLATIONS = {
         'employee_id': 'Сотрудник',
         'role_id': 'Роль',
     },
+    'Role': {
+        'name': 'Роль',
+        'description': 'Описание',
+    },
+    'Permission': {
+        'name': 'Право',
+        'description': 'Описание',
+    },
 }
 
 print("TableWidget module loaded")
@@ -260,7 +268,15 @@ class TableWidget(QWidget):
                         filters['branch_id'] = branch_id
                     elif 'view_own_kiosk' in permissions and kiosk_id:
                         filters['kiosk_id'] = kiosk_id
-                rows, total = self.service.get_page(page, page_size, filters=filters)
+                # --- Исправление: поддержка сервисов без get_page ---
+                if hasattr(self.service, 'get_page'):
+                    rows, total = self.service.get_page(page, page_size, filters=filters)
+                else:
+                    all_rows = self.service.get_all(filters=filters)
+                    total = len(all_rows)
+                    start = (page - 1) * page_size
+                    end = start + page_size
+                    rows = all_rows[start:end]
                 self.total_pages = max(1, (total + page_size - 1) // page_size)
                 self.page_label.setText(f"Страница {self.current_page} из {self.total_pages} (всего: {total})")
                 if rows:
@@ -269,9 +285,15 @@ class TableWidget(QWidget):
                     hidden_cols = {'id', '_sa_instance_state'}
                     if self.table_name == 'Branch':
                         hidden_cols.add('office_id')
-                    columns = [col for col in all_columns if col not in hidden_cols]
-                    self.columns = all_columns
-                    self.visible_columns = columns
+                    if self.table_name == 'UserRole':
+                        # Для UserRole показываем только employee_id и role_id
+                        columns = ['employee_id', 'role_id']
+                        self.columns = columns
+                        self.visible_columns = columns
+                    else:
+                        columns = [col for col in all_columns if col not in hidden_cols]
+                        self.columns = all_columns
+                        self.visible_columns = columns
                     table_key = self.table_name.strip('`')
                     col_trans = COLUMN_TRANSLATIONS.get(table_key, {})
                     header_labels = [col_trans.get(col, col) for col in columns]

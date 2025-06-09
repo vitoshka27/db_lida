@@ -36,4 +36,14 @@ class RoleService:
         if user_role:
             session.delete(user_role)
             session.commit()
-        session.close() 
+        session.close()
+
+    def get_all(self, filters=None):
+        session = SessionLocal()
+        query = session.query(Role)
+        if filters:
+            for k, v in filters.items():
+                query = query.filter(getattr(Role, k) == v)
+        roles = query.all()
+        session.close()
+        return roles 

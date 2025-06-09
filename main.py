@@ -197,6 +197,10 @@ class MainWindow(QMainWindow):
             'ServiceOrder': ServiceOrderService(),
             'Workplace': WorkplaceService(),
             'Employee': EmployeeService(),
+            'Role': RoleService(),
+            'Permission': PermissionService(),
+            'RolePermission': RolePermissionService(),
+            'UserRole': UserRoleService(),
         }
         self.setWindowTitle("Фотоцентр")
         self.setGeometry(100, 100, 1200, 700)
