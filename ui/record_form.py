@@ -8,19 +8,50 @@ class RecordForm(QDialog):
         self.inputs = {}
         self.pk_columns = pk_columns or []
         self.fk_options = fk_options or {}
+        # Список булевых полей (можно расширить при необходимости)
+        BOOL_FIELDS = {'is_urgent', 'is_profi_client', 'is_active', 'is_admin', 'is_deleted'}
         for i, col in enumerate(columns):
             # --- FK: если есть опции, используем QComboBox ---
             if col in self.fk_options:
                 cb = QComboBox(self)
+                cb.addItem('Не выбрано', None)
                 options = self.fk_options[col]
                 for id_val, display in options:
                     cb.addItem(str(display), id_val)
                 if values:
-                    # выставить по id
                     id_val = values[i]
-                    idx = next((j for j, (idv, _) in enumerate(options) if str(idv) == str(id_val)), -1)
-                    if idx >= 0:
-                        cb.setCurrentIndex(idx)
+                    idx = next((j+1 for j, (idv, _) in enumerate(options) if str(idv) == str(id_val)), 0)
+                    cb.setCurrentIndex(idx)
+                self.layout.addRow(col, cb)
+                self.inputs[col] = cb
+                continue
+            # --- order_type: человеко-понятный текст <-> код ---
+            if col == 'order_type':
+                cb = QComboBox(self)
+                cb.addItem('Проявка плёнки', 'film')
+                cb.addItem('Печать фотографий', 'print')
+                cb.addItem('Проявка + печать', 'both')
+                if values:
+                    val = values[i]
+                    idx = {None: 0, 'film': 1, 'print': 2, 'both': 3}.get(val, 0)
+                    cb.setCurrentIndex(idx)
+                self.layout.addRow(col, cb)
+                self.inputs[col] = cb
+                continue
+            # --- Boolean поля: Да/Нет/Не выбрано ---
+            if col in BOOL_FIELDS:
+                cb = QComboBox(self)
+                cb.addItem('Не выбрано', None)
+                cb.addItem('Да', True)
+                cb.addItem('Нет', False)
+                if values:
+                    val = values[i]
+                    if val in (1, True, '1', 'TRUE', 'True', 'Да'):
+                        cb.setCurrentIndex(1)
+                    elif val in (0, False, '0', 'FALSE', 'False', 'Нет'):
+                        cb.setCurrentIndex(2)
+                    else:
+                        cb.setCurrentIndex(0)
                 self.layout.addRow(col, cb)
                 self.inputs[col] = cb
                 continue
@@ -75,9 +106,21 @@ class RecordForm(QDialog):
 
     def get_data(self):
         data = []
+        BOOL_FIELDS = {'is_urgent', 'is_profi_client', 'is_active', 'is_admin', 'is_deleted'}
         for col, widget in self.inputs.items():
             if isinstance(widget, QComboBox):
-                data.append(widget.currentData())
+                val = widget.currentData()
+                # Для булевых полей возвращаем 1/0/None
+                if col in BOOL_FIELDS:
+                    if val is True:
+                        data.append(1)
+                    elif val is False:
+                        data.append(0)
+                    else:
+                        data.append(None)
+                else:
+                    data.append(None if val is None or val == '' else val)
             else:
-                data.append(widget.text())
+                text = widget.text()
+                data.append(text if text != '' else None)
         return data
