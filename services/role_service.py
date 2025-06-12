@@ -1,9 +1,10 @@
 from orm_db import SessionLocal
 from models_orm import Role, Permission, UserRole, RolePermission
+from services.base_service import BaseService
 
-class RoleService:
+class RoleService(BaseService):
     def __init__(self):
-        pass
+        super().__init__(Role)
 
     def get_user_roles(self, employee_id):
         session = SessionLocal()

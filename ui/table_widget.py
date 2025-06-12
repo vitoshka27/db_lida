@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QPushButton, QHBoxLayout, QMessageBox, QTableWidgetItem, QDialog, QLabel, QSpinBox
 from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt
 from ui.record_form import RecordForm
+from services.entity_services import *
 
 COLUMN_TRANSLATIONS = {
     'MainOffice': {
@@ -11,7 +13,6 @@ COLUMN_TRANSLATIONS = {
         'workplace_count_for_kiosk': 'Раб. мест (киоск)',
     },
     'Branch': {
-        'office_id': 'ID офиса',
         'name': 'Название',
         'address': 'Адрес',
     },
@@ -57,6 +58,7 @@ COLUMN_TRANSLATIONS = {
         'unit_price': 'Цена за ед.',
     },
     'Supply': {
+        'id': 'Номер поставки',
         'supplier_id': 'Поставщик',
         'product_id': 'Товар',
         'supply_date': 'Дата поставки',
@@ -158,12 +160,13 @@ class TableWidget(QWidget):
         self.layout = QVBoxLayout(self)
         self.table = QTableWidget(self)
         self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.setStyleSheet('''
             QTableWidget {
                 background: #fff;
                 border-radius: 18px;
                 border: 2px solid #e0e4ea;
-                font-size: 15px;
+                font-size: 19px;
                 font-family: 'Segoe UI', 'Arial', sans-serif;
                 selection-background-color: #e3f0ff;
                 selection-color: #23272e;
@@ -172,18 +175,19 @@ class TableWidget(QWidget):
             QHeaderView::section {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f8cff, stop:1 #6ec6ff);
                 color: #fff;
-                font-size: 16px;
+                font-size: 20px;
                 font-weight: bold;
                 border: none;
                 border-top-left-radius: 18px;
                 border-top-right-radius: 18px;
-                padding: 8px 0;
+                padding: 12px 0;
             }
             QTableWidget::item {
                 color: #23272e;
                 background: #fff;
                 border-bottom: 1.5px solid #e0e4ea;
-                padding: 6px 8px;
+                padding: 10px 16px;
+                font-size: 19px;
             }
             QTableWidget::item:selected {
                 background: #e3f0ff;
@@ -282,24 +286,28 @@ class TableWidget(QWidget):
                 if rows:
                     model = type(rows[0])
                     all_columns = list(model.__table__.columns.keys())
-                    hidden_cols = {'id', '_sa_instance_state'}
+                    pk_cols = [col.name for col in model.__table__.primary_key.columns]
+                    hidden_cols = {'_sa_instance_state'}
                     if self.table_name == 'Branch':
                         hidden_cols.add('office_id')
-                    if self.table_name == 'UserRole':
-                        # Для UserRole показываем только employee_id и role_id
-                        columns = ['employee_id', 'role_id']
-                        self.columns = columns
-                        self.visible_columns = columns
+                    # --- Корректная логика: columns = все поля, visible_columns = только нужные ---
+                    columns = [col for col in all_columns if col not in hidden_cols]
+                    self.columns = columns
+                    if self.table_name in ('Order', '`Order`', 'Supply', '`Supply`'):
+                        self.visible_columns = columns[:]
                     else:
-                        columns = [col for col in all_columns if col not in hidden_cols]
-                        self.columns = all_columns
-                        self.visible_columns = columns
+                        self.visible_columns = [col for col in columns if col != 'id']
+                    # --- END ---
                     table_key = self.table_name.strip('`')
                     col_trans = COLUMN_TRANSLATIONS.get(table_key, {})
                     header_labels = [col_trans.get(col, col) for col in columns]
                     self.table.setRowCount(len(rows))
                     self.table.setColumnCount(len(columns))
                     self.table.setHorizontalHeaderLabels(header_labels)
+                    # Скрываем id если не нужен
+                    if 'id' in columns and 'id' not in self.visible_columns:
+                        idx = columns.index('id')
+                        self.table.setColumnHidden(idx, True)
                     # Карта: внешний ключ -> (имя relationship, поле для отображения)
                     fk_display = {
                         'client_id':    ('client', 'full_name'),
@@ -349,7 +357,19 @@ class TableWidget(QWidget):
                             # null/None -> ''
                             if val is None or str(val).lower() == 'none':
                                 val = ''
-                            self.table.setItem(i, j, QTableWidgetItem(str(val)))
+                            item = QTableWidgetItem(str(val))
+                            # Если это PK — делаем ячейку read-only и сохраняем id в UserRole
+                            if model and hasattr(model, '__table__'):
+                                pk_cols = [c.name for c in model.__table__.primary_key.columns]
+                                if col in pk_cols:
+                                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                                    # Сохраняем id (или tuple PK) в UserRole
+                                    if len(pk_cols) == 1:
+                                        item.setData(Qt.UserRole, getattr(obj, col, None))
+                                    else:
+                                        # Для составного ключа сохраняем tuple
+                                        item.setData(Qt.UserRole, tuple(getattr(obj, pk, None) for pk in pk_cols))
+                            self.table.setItem(i, j, item)
                     self.table.resizeColumnsToContents()
                 else:
                     self.table.setRowCount(0)
@@ -358,6 +378,91 @@ class TableWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки данных: {e}")
 
+    def get_pk_value(self, row):
+        # Для составных ключей возвращаем кортеж значений всех PK-колонок в правильном порядке и типе
+        model = None
+        if hasattr(self, 'columns') and self.table.rowCount() > 0:
+            item = self.table.item(row, 0)
+            if item:
+                model = type(self.service.get_all()[0]) if hasattr(self.service, 'get_all') and self.service.get_all() else None
+        if model and hasattr(model, '__table__'):
+            pk_cols = [col.name for col in model.__table__.primary_key.columns]
+            values = []
+            for pk_col in pk_cols:
+                if pk_col in self.columns:
+                    idx = self.columns.index(pk_col)
+                    item = self.table.item(row, idx)
+                    val = item.text() if item else None
+                    # Приведение к типу из модели
+                    col_type = str(model.__table__.columns[pk_col].type)
+                    try:
+                        if val is not None:
+                            if 'INTEGER' in col_type or 'INT' in col_type:
+                                val = int(val)
+                            elif 'FLOAT' in col_type or 'REAL' in col_type:
+                                val = float(val)
+                    except Exception:
+                        QMessageBox.critical(self, "Ошибка", f"Некорректное значение ключа: {val} (ожидался тип {col_type})")
+                        return None
+                    values.append(val)
+            if len(values) == 1:
+                return values[0]
+            return tuple(values)
+        # Fallback: первый столбец
+        item = self.table.item(row, 0)
+        if item:
+            return item.text()
+        return None
+
+    def get_fk_options(self, columns):
+        # Карта: внешний ключ -> (имя сервиса, поле для отображения)
+        fk_map = {
+            'client_id':    ('Client', 'full_name'),
+            'branch_id':    ('Branch', 'name'),
+            'kiosk_id':     ('Kiosk', 'kiosk_name'),
+            'product_id':   ('Product', 'name'),
+            'supplier_id':  ('Supplier', 'name'),
+            'category_id':  ('ProductCategory', 'name'),
+            'service_code': ('ServiceType', 'description'),
+            'workplace_id': ('Workplace', 'position'),
+            'to_branch_id': ('Branch', 'name'),
+            'to_kiosk_id':  ('Kiosk', 'kiosk_name'),
+            'role_id': ('Role', 'name'),
+            'permission_id': ('Permission', 'name'),
+            'employee_id': ('Employee', 'full_name'),
+        }
+        fk_options = {}
+        for col in columns:
+            if col == 'workplace_id' and getattr(self, 'table_name', None) in ('Employee',):
+                # Особое отображение для Employee.workplace_id
+                service = WorkplaceService()
+                items = service.get_all()
+                options = []
+                for w in items:
+                    if getattr(w, 'branch_id', None):
+                        branch = w.branch
+                        branch_name = getattr(branch, 'name', '') if branch else ''
+                        display = f"Филиал {branch_name} - {getattr(w, 'position', '')}"
+                    elif getattr(w, 'kiosk_id', None):
+                        kiosk = w.kiosk
+                        kiosk_name = getattr(kiosk, 'kiosk_name', '') if kiosk else ''
+                        display = f"Киоск {kiosk_name} - {getattr(w, 'position', '')}"
+                    else:
+                        display = getattr(w, 'position', '')
+                    options.append((w.id, display))
+                fk_options[col] = options
+                continue
+            if col in fk_map:
+                service_name, display_field = fk_map[col]
+                service = globals().get(f'{service_name}Service')
+                if service is None:
+                    continue
+                service_obj = service()
+                items = service_obj.get_all()
+                options = [(getattr(item, 'id', getattr(item, col, None)), getattr(item, display_field, str(item))) for item in items]
+                fk_options[col] = options
+        return fk_options
+
     def add_record(self):
         if not self.service:
             return
@@ -365,11 +470,27 @@ class TableWidget(QWidget):
         if not columns:
             self.load_data()
             columns = getattr(self, 'columns', None)
+        model = None
+        if hasattr(self.service, 'get_all') and self.service.get_all():
+            model = type(self.service.get_all()[0])
+        pk_columns = []
+        if model and hasattr(model, '__table__'):
+            pk_columns = [col.name for col in model.__table__.primary_key.columns]
         if self.table_name == 'Branch':
             insert_columns = [col for i, col in enumerate(columns) if i != 0 and col != 'office_id']
+        elif self.table_name in ('UserRole', 'RolePermission', 'Sale', 'ServiceOrder', 'PrintDetail', 'ProfiDiscount', 'SupplierSpecialization'):
+            insert_columns = columns  # для составных PK не скрываем PK
         else:
             insert_columns = [col for i, col in enumerate(columns) if not (i == 0 and (col.lower() == 'id' or col.endswith('_id')))]
-        form = RecordForm(insert_columns, parent=self)
+        fk_options = self.get_fk_options(insert_columns)
+        form = RecordForm(insert_columns, parent=self, pk_columns=pk_columns, fk_options=fk_options)
+        # --- Добавляю переводимые лейблы ---
+        table_key = self.table_name.strip('`')
+        col_trans = COLUMN_TRANSLATIONS.get(table_key, {})
+        for i, col in enumerate(insert_columns):
+            label = col_trans.get(col, col)
+            form.layout.labelForField(form.inputs[col]).setText(label)
+        # --- END ---
         result = form.exec()
         if result == QDialog.Accepted:
             data = form.get_data()
@@ -390,13 +511,57 @@ class TableWidget(QWidget):
         if not columns:
             self.load_data()
             columns = getattr(self, 'columns', None)
-        values = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in range(self.table.columnCount())]
-        pk_value = self.get_pk_value(row)
+        model = None
+        if hasattr(self.service, 'get_all') and self.service.get_all():
+            model = type(self.service.get_all()[0])
+        pk_columns = []
+        if model and hasattr(model, '__table__'):
+            pk_columns = [col.name for col in model.__table__.primary_key.columns]
         if self.table_name == 'Branch':
             edit_columns = [col for i, col in enumerate(columns) if i != 0 and col != 'office_id']
+        elif self.table_name in ('UserRole', 'RolePermission', 'Sale', 'ServiceOrder', 'PrintDetail', 'ProfiDiscount', 'SupplierSpecialization'):
+            edit_columns = columns  # для составных PK не скрываем PK
         else:
             edit_columns = columns[1:]
-        form = RecordForm(edit_columns, values, parent=self)
+        fk_options = self.get_fk_options(edit_columns)
+        # Получаем PK из UserRole
+        pk_value = None
+        if pk_columns:
+            idx = self.columns.index(pk_columns[0])
+            item = self.table.item(row, idx)
+            if item:
+                pk_value = item.data(Qt.UserRole)
+        # Получаем ORM-объект по PK
+        obj = None
+        if pk_value is not None:
+            if isinstance(pk_value, tuple):
+                # Составной ключ
+                filter_kwargs = dict(zip(pk_columns, pk_value))
+                obj = self.service.get_all(filters=filter_kwargs)
+                if obj:
+                    obj = obj[0]
+            else:
+                obj = self.service.get_by_id(pk_value)
+        # Формируем значения для формы строго по edit_columns
+        values = []
+        labels = []
+        table_key = self.table_name.strip('`')
+        col_trans = COLUMN_TRANSLATIONS.get(table_key, {})
+        for col in edit_columns:
+            if col in fk_options and obj is not None:
+                val = getattr(obj, col, '')
+                values.append(val)
+            elif col in self.columns:
+                idx = self.columns.index(col)
+                item = self.table.item(row, idx)
+                values.append(item.text() if item else '')
+            else:
+                values.append('')
+            labels.append(col_trans.get(col, col))
+        form = RecordForm(edit_columns, values, parent=self, pk_columns=pk_columns, fk_options=fk_options)
+        # Устанавливаем красивые лейблы
+        for i, label in enumerate(labels):
+            form.layout.labelForField(form.inputs[edit_columns[i]]).setText(label)
         result = form.exec()
         if result == QDialog.Accepted:
             new_data = form.get_data()
@@ -413,9 +578,33 @@ class TableWidget(QWidget):
         if row < 0:
             QMessageBox.warning(self, "Внимание", "Выберите строку для удаления")
             return
-        pk_value = self.get_pk_value(row)
-        visible_data = [self.table.item(row, col).text() for col in range(self.table.columnCount())]
-        visible_str = ', '.join(f'{col}: {val}' for col, val in zip(self.visible_columns, visible_data))
+        # Получаем PK из UserRole (аналогично edit_record)
+        columns = getattr(self, 'columns', None)
+        if not columns:
+            self.load_data()
+            columns = getattr(self, 'columns', None)
+        model = None
+        if hasattr(self.service, 'get_all') and self.service.get_all():
+            model = type(self.service.get_all()[0])
+        pk_columns = []
+        if model and hasattr(model, '__table__'):
+            pk_columns = [col.name for col in model.__table__.primary_key.columns]
+        pk_value = None
+        if pk_columns:
+            idx = self.columns.index(pk_columns[0])
+            item = self.table.item(row, idx)
+            if item:
+                pk_value = item.data(Qt.UserRole)
+        # Формируем строку только по видимым колонкам (не PK) с красивыми заголовками
+        visible_strs = []
+        table_key = self.table_name.strip('`')
+        col_trans = COLUMN_TRANSLATIONS.get(table_key, {})
+        for col in self.visible_columns:
+            idx = self.columns.index(col)
+            header = col_trans.get(col, col)
+            val = self.table.item(row, idx).text() if self.table.item(row, idx) else ''
+            visible_strs.append(f'{header}: {val}')
+        visible_str = ', '.join(visible_strs)
         reply = QMessageBox.question(self, "Подтверждение", f"Удалить запись ({visible_str})?", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             try:
@@ -423,13 +612,6 @@ class TableWidget(QWidget):
                 self.load_data()
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Ошибка удаления: {e}")
-
-    def get_pk_value(self, row):
-        # Предполагаем, что первый столбец — это PK (id)
-        item = self.table.item(row, 0)
-        if item:
-            return item.text()
-        return None
 
     def prev_page(self):
         if self.current_page > 1:

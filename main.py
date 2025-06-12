@@ -8,6 +8,7 @@ from ui.table_widget import TableWidget
 from ui.login_dialog import LoginScreen
 import bcrypt
 from ui.raw_sql_widget import RawSQLWidget
+from ui.user_query_widget import UserQueryWidget
 from services.entity_services import *
 from services.role_service import RoleService
 from services.auth_service import AuthService
@@ -218,6 +219,8 @@ class MainWindow(QMainWindow):
         self.profile_screen = None
         self.main_ui_widget = None
         self.sql_widget = None
+        self.raw_sql_widget = None
+        self.user_query_widget = None
 
     def handle_login(self, username, password):
         try:
@@ -260,6 +263,7 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(role_label)
         top_layout.addStretch(1)
         self.raw_sql_widget = None
+        self.user_query_widget = None
         if self.user_info.get('position', '').lower() == 'администратор' or self.user_info.get('login', '').startswith('admin'):
             self.raw_sql_widget = RawSQLWidget()
             self.sql_btn = QPushButton("📝 SQL")
@@ -280,6 +284,26 @@ class MainWindow(QMainWindow):
             ''')
             self.sql_btn.clicked.connect(self.show_sql)
             top_layout.addWidget(self.sql_btn)
+            # Кнопка пользовательских запросов
+            self.user_query_widget = UserQueryWidget(back_callback=self.back_from_user_queries)
+            self.user_query_btn = QPushButton("📊 Пользовательские запросы")
+            self.user_query_btn.setStyleSheet('''
+                QPushButton {
+                    color: #111;
+                    background: #fff;
+                    border-radius: 10px;
+                    font-size: 16px;
+                    font-family: 'Segoe UI', 'Arial', sans-serif;
+                    padding: 8px 18px;
+                    margin: 8px 8px 8px 0;
+                    border: 2px solid #4f8cff;
+                }
+                QPushButton:hover {
+                    background: #e3f0ff;
+                }
+            ''')
+            self.user_query_btn.clicked.connect(self.show_user_queries)
+            top_layout.addWidget(self.user_query_btn)
         # Кнопка профиля — иконка (generic user, не совпадает с меню сотрудников)
         user_svg = '''<svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"16\" cy=\"12\" r=\"6\" stroke=\"white\" stroke-width=\"2.5\"/><path d=\"M6 26c0-4 4.5-6 10-6s10 2 10 6\" stroke=\"white\" stroke-width=\"2.5\" stroke-linecap=\"round\"/></svg>'''
         pixmap = QPixmap(32, 32)
@@ -399,7 +423,11 @@ class MainWindow(QMainWindow):
             self.dock.hide()
             for btn in self.menu_buttons.values():
                 btn.setChecked(False)
-            self.raw_sql_widget.back_btn.clicked.disconnect()
+            # Безопасно отключаем сигнал, чтобы не было RuntimeWarning
+            try:
+                self.raw_sql_widget.back_btn.clicked.disconnect()
+            except Exception:
+                pass
             self.raw_sql_widget.back_btn.clicked.connect(self.back_from_sql)
 
     def back_from_sql(self):
@@ -407,6 +435,19 @@ class MainWindow(QMainWindow):
         self.dock.show()
         # Выделяем первую таблицу (или ту, что была до SQL)
         self.menu_buttons[TABLES[0][0]].setChecked(True)
+
+    def show_user_queries(self):
+        if self.user_query_widget:
+            if self.central_stack.indexOf(self.user_query_widget) == -1:
+                self.central_stack.addWidget(self.user_query_widget)
+            self.central_stack.setCurrentWidget(self.user_query_widget)
+            self.dock.hide()
+            # Кнопка назад
+            # ...
+
+    def back_from_user_queries(self):
+        self.central_stack.setCurrentIndex(0)
+        self.dock.show()
 
     def logout(self):
         self.user_info = None

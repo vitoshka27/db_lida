@@ -1,10 +1,12 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QTextEdit, QLabel, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QTextEdit, QLabel, QTableWidget, QTableWidgetItem, QComboBox, QFormLayout
 import mysql.connector
 from config import DB_CONFIG
 from PySide6.QtGui import QIcon
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtGui import QPixmap, QPainter
 from PySide6.QtCore import QByteArray, Qt, QSize
+import os
+import re
 
 class RawSQLWidget(QWidget):
     def __init__(self, parent=None):
@@ -49,6 +51,34 @@ class RawSQLWidget(QWidget):
         main_layout.addWidget(self.result_label)
         self.result_table = QTableWidget(self)
         main_layout.addWidget(self.result_table)
+        self.result_table.verticalHeader().setDefaultSectionSize(30)
+        self.result_table.setStyleSheet('''
+            QTableWidget {
+                background: #181c24;
+                color: #fff;
+                font-size: 15px;
+                border: none;
+            }
+            QHeaderView::section {
+                background: #23272e;
+                color: #fff;
+                font-size: 15px;
+                font-weight: 600;
+                border: none;
+                padding: 6px 0;
+            }
+            QTableWidget::item {
+                color: #fff;
+                background: #181c24;
+                border: none;
+                padding: 6px 10px;
+                font-size: 15px;
+            }
+            QTableWidget::item:selected {
+                background: #4f8cff;
+                color: #fff;
+            }
+        ''')
         self.execute_btn.clicked.connect(self.execute_query)
 
     def execute_query(self):
@@ -69,6 +99,7 @@ class RawSQLWidget(QWidget):
                 for i, row in enumerate(rows):
                     for j, val in enumerate(row):
                         self.result_table.setItem(i, j, QTableWidgetItem(str(val)))
+                self.result_table.resizeColumnsToContents()
                 self.result_label.setText(f'Результатов: {len(rows)}')
             else:
                 conn.commit()

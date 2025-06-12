@@ -51,7 +51,16 @@ class BaseService:
 
     def update(self, id, **kwargs):
         session = SessionLocal()
-        obj = session.get(self.model_cls, id)
+        obj = None
+        if isinstance(id, tuple):
+            pk_cols = [col.name for col in self.model_cls.__table__.primary_key.columns]
+            filter_kwargs = dict(zip(pk_cols, id))
+            obj = session.query(self.model_cls).filter_by(**filter_kwargs).first()
+        else:
+            obj = session.get(self.model_cls, id)
+        if obj is None:
+            session.close()
+            raise Exception('Object not found')
         for k, v in kwargs.items():
             setattr(obj, k, v)
         session.commit()
@@ -61,7 +70,16 @@ class BaseService:
 
     def delete(self, id):
         session = SessionLocal()
-        obj = session.get(self.model_cls, id)
+        obj = None
+        if isinstance(id, tuple):
+            pk_cols = [col.name for col in self.model_cls.__table__.primary_key.columns]
+            filter_kwargs = dict(zip(pk_cols, id))
+            obj = session.query(self.model_cls).filter_by(**filter_kwargs).first()
+        else:
+            obj = session.get(self.model_cls, id)
+        if obj is None:
+            session.close()
+            raise Exception('Object not found')
         session.delete(obj)
         session.commit()
         session.close() 

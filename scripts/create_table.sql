@@ -223,14 +223,14 @@ CREATE TABLE Role (
     description VARCHAR(255)
 );
 
--- Таблица прав (permissions)
+-- Таблица прав 
 CREATE TABLE Permission (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     description VARCHAR(255)
 );
 
--- Таблица связей ролей и прав (многие-ко-многим)
+-- Таблица связей ролей и прав 
 CREATE TABLE RolePermission (
     role_id INT NOT NULL,
     permission_id INT NOT NULL,
@@ -239,7 +239,7 @@ CREATE TABLE RolePermission (
     FOREIGN KEY (permission_id) REFERENCES Permission(id) ON DELETE CASCADE
 );
 
--- Таблица связей пользователей и ролей (многие-ко-многим)
+-- Таблица связей пользователей и ролей 
 CREATE TABLE UserRole (
     employee_id INT NOT NULL,
     role_id INT NOT NULL,
@@ -247,4 +247,3 @@ CREATE TABLE UserRole (
     FOREIGN KEY (employee_id) REFERENCES Employee(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES Role(id) ON DELETE CASCADE
 );
-
